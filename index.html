@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Limitless — Voice-First UPI</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#0b0d10">
+<style>
+  :root{
+    --bg:#0b0d10;
+    --panel:#14171c;
+    --accent:#5ec6ff;
+    --accent2:#7effa0;
+    --warn:#ffb84d;
+    --danger:#ff6b6b;
+    --whisper:#b98cff;
+    --text:#f2f4f7;
+    --muted:#9aa4b2;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    height:100%; margin:0; padding:0;
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #app{
+    position:relative;
+    min-height:100vh;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    padding:24px;
+    transition:background 0.4s ease;
+  }
+  #app.whisper-active{ background:#150c22; }
+  #app.lockout{ background:#210b0b; }
+
+  .corner{
+    position:fixed; width:88px; height:88px; z-index:50;
+    background:transparent; border:none; outline:none;
+  }
+  .corner:active{ background:rgba(94,198,255,0.12); }
+  #corner-tl{ top:0; left:0; }
+  #corner-tr{ top:0; right:0; }
+  #corner-bl{ bottom:0; left:0; }
+  #corner-br{ bottom:0; right:0; }
+
+  .card{
+    background:var(--panel);
+    border-radius:20px;
+    padding:32px 28px;
+    max-width:520px; width:100%;
+    box-shadow:0 0 0 1px rgba(255,255,255,0.04), 0 20px 60px rgba(0,0,0,0.5);
+    text-align:center;
+  }
+  .badge{
+    display:inline-block; font-size:13px; letter-spacing:0.06em;
+    text-transform:uppercase; color:var(--muted);
+    border:1px solid rgba(255,255,255,0.1); border-radius:999px;
+    padding:4px 12px; margin-bottom:16px;
+  }
+  .badge.whisper{ color:var(--whisper); border-color:var(--whisper); }
+  .badge.lockout{ color:var(--danger); border-color:var(--danger); }
+
+  h1{ font-size:26px; margin:0 0 6px; }
+  .sub{ color:var(--muted); font-size:15px; margin-bottom:24px; }
+
+  .mic-wrap{
+    width:120px; height:120px; margin:0 auto 22px;
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 40%, #1c2530, #0e1216);
+    border:2px solid rgba(94,198,255,0.35);
+    position:relative;
+  }
+  .mic-wrap.listening{ animation:pulse 1.4s infinite; border-color:var(--accent); }
+  .mic-wrap.whisper{ border-color:var(--whisper); }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 rgba(94,198,255,0.35); }
+    70%{ box-shadow:0 0 0 22px rgba(94,198,255,0); }
+    100%{ box-shadow:0 0 0 0 rgba(94,198,255,0); }
+  }
+  .mic-icon{ font-size:44px; }
+
+  .status-line{
+    min-height:52px; font-size:17px; line-height:1.5;
+    color:var(--text); margin-bottom:18px;
+  }
+  .status-line.whisper{ color:var(--whisper); }
+
+  .step-list{ text-align:left; font-size:13px; color:var(--muted); margin:18px 0 0; list-style:none; padding:0; }
+  .step-list li{ padding:4px 0; display:flex; align-items:center; gap:8px; }
+  .step-list li.done{ color:var(--accent2); }
+  .step-list li.active{ color:var(--accent); font-weight:600; }
+  .dot{ width:8px; height:8px; border-radius:50%; background:currentColor; flex:0 0 auto; }
+
+  .btn-row{ display:flex; gap:10px; justify-content:center; margin-top:22px; flex-wrap:wrap; }
+  button.action{
+    background:var(--accent); color:#04121c; border:none;
+    font-size:15px; font-weight:700; padding:14px 22px; border-radius:12px;
+    cursor:pointer; min-width:150px;
+  }
+  button.action.secondary{ background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  button.action.ghost{ background:transparent; color:var(--muted); border:1px solid rgba(255,255,255,0.15); }
+  button.action:disabled{ opacity:0.4; cursor:not-allowed; }
+
+  .pin-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:20px; }
+  .pin-btn{
+    background:#1b212a; border:1px solid rgba(255,255,255,0.08);
+    color:var(--text); font-size:20px; font-weight:700;
+    padding:26px 0; border-radius:16px; cursor:pointer;
+  }
+  .pin-btn:active{ background:#26303c; }
+  .pin-entry{ letter-spacing:8px; font-size:22px; margin-top:14px; color:var(--accent); min-height:28px; }
+
+  .log{
+    text-align:left; font-size:12px; color:var(--muted);
+    background:#0e1116; border-radius:12px; padding:12px 14px;
+    max-height:130px; overflow-y:auto; margin-top:20px;
+    font-family:ui-monospace,Menlo,monospace;
+  }
+  .log div{ margin-bottom:4px; }
+
+  .amount-big{ font-size:38px; font-weight:800; color:var(--accent2); margin:6px 0; }
+  .recipient-name{ font-size:18px; color:var(--text); margin-bottom:4px; }
+
+  footer.hint{
+    position:fixed; bottom:10px; left:0; right:0; text-align:center;
+    font-size:11px; color:var(--muted); opacity:0.6;
+  }
+  .sr-only{
+    position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <button class="corner" id="corner-tl" aria-label="Repeat last spoken content"></button>
+  <button class="corner" id="corner-tr" aria-label="Repeat last spoken content"></button>
+  <button class="corner" id="corner-bl" aria-label="Repeat last spoken content"></button>
+  <button class="corner" id="corner-br" aria-label="Repeat last spoken content"></button>
+
+  <div class="card" id="card">
+    <span class="badge" id="badge">Sleeping</span>
+    <h1 id="title">Limitless</h1>
+    <div class="sub" id="subtitle">Say "Hey Limitless" to begin</div>
+
+    <div class="mic-wrap" id="micWrap"><span class="mic-icon">🎙️</span></div>
+
+    <div class="status-line" id="statusLine" aria-live="polite">Tap the mic or say the wake word.</div>
+
+    <div id="dynamicArea"></div>
+
+    <div class="btn-row" id="btnRow"></div>
+
+    <ul class="step-list" id="stepList"></ul>
+
+    <div class="log" id="log" aria-hidden="true"></div>
+  </div>
+
+  <footer class="hint">Prototype demo · simulated biometrics · mock UPI data · touch any corner to repeat</footer>
+</div>
+
+<script>
+/* =========================================================
+   LIMITLESS PROTOTYPE — full end-to-end flow, single file
+   Vanilla JS, Web Speech API (STT+TTS), simulated biometrics
+   ========================================================= */
+
+// ---------- Mock data ----------
+const MOCK_USER = {
+  name: "Amirthesh",
+  balance: 18450.75,
+  securityQA: { question: "your first pet's name", answer: "rocky" },
+  circle: [
+    { nickname: "ramesh", holder: "Ramesh Kumar", upi: "ramesh.k@okhdfc" },
+    { nickname: "amma", holder: "Lakshmi Devi", upi: "lakshmi.devi@okicici" },
+    { nickname: "raj", holder: "Rajesh Iyer", upi: "rajesh.iyer@oksbi" }
+  ],
+  braillePin: "1234"
+};
+// mock phone -> UPI resolution
+const MOCK_PHONE_DIRECTORY = {
+  "9876543210": { holder: "Suresh Babu", upi: "suresh.babu@okaxis" },
+  "9123456780": { holder: "Priya Sharma", upi: "priya.sharma@okhdfc" }
+};
+
+// ---------- State ----------
+let state = {
+  screen: "sleeping", // sleeping, login-auth, menu, transaction-auth, whisper-active, confirm, success, balance, lockout
+  loginStep: 0,       // 0 fingerprint, 1 face/pin
+  txnStep: 0,         // 0 fingerprint, 1 qa, 2 face/pin
+  loginFactors: { fingerprint:false, faceOrPin:false },
+  txnFactors: { fingerprint:false, qa:false, faceOrPin:false },
+  pendingTxn: null,   // {recipientName, upi, amount}
+  failCount: 0,
+  lockoutLevel: 0,    // 0 none, 1 temp, 2 extended
+  lastSpoken: "",
+  lastSpokenWhisper: null, // separately tracked whisper content
+  pinBuffer: "",
+  pinTarget: null, // 'login' | 'txn'
+  listeningFor: null // what the STT result should be interpreted as
+};
+
+const el = id => document.getElementById(id);
+const appEl = el('app');
+const badgeEl = el('badge');
+const titleEl = el('title');
+const subtitleEl = el('subtitle');
+const micWrap = el('micWrap');
+const statusLine = el('statusLine');
+const dynamicArea = el('dynamicArea');
+const btnRow = el('btnRow');
+const stepList = el('stepList');
+const logEl = el('log');
+
+function log(msg){
+  const d = document.createElement('div');
+  d.textContent = `» ${msg}`;
+  logEl.prepend(d);
+}
+
+// ---------- Speech synthesis ----------
+function speak(text, {whisper=false, rate=1.0}={}){
+  return new Promise(resolve=>{
+    statusLine.textContent = text;
+    statusLine.classList.toggle('whisper', whisper);
+    if(whisper){ state.lastSpokenWhisper = text; }
+    else { state.lastSpoken = text; }
+    log((whisper ? "[whisper] " : "") + text);
+
+    if(!('speechSynthesis' in window)){ resolve(); return; }
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = whisper ? 0.85 : rate;
+    utter.volume = whisper ? 0.35 : 1.0;
+    utter.pitch = whisper ? 0.9 : 1.0;
+    utter.onend = resolve;
+    utter.onerror = resolve;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utter);
+  });
+}
+
+function repeatLast(){
+  if(state.screen === 'whisper-active' && state.lastSpokenWhisper){
+    speak(state.lastSpokenWhisper, {whisper:true});
+  } else if(state.lastSpoken){
+    speak(state.lastSpoken, {whisper:false});
+  }
+}
+['corner-tl','corner-tr','corner-bl','corner-br'].forEach(id=>{
+  el(id).addEventListener('click', repeatLast);
+});
+
+// ---------- Speech recognition ----------
+let recognition = null;
+let recognizing = false;
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if(SR){
+  recognition = new SR();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = 'en-IN';
+  recognition.onresult = (e)=>{
+    const transcript = e.results[0][0].transcript.trim();
+    log(`heard: "${transcript}"`);
+    handleTranscript(transcript.toLowerCase());
+  };
+  recognition.onend = ()=>{
+    recognizing = false;
+    micWrap.classList.remove('listening');
+  };
+  recognition.onerror = (e)=>{
+    recognizing = false;
+    micWrap.classList.remove('listening');
+    log(`mic error: ${e.error}`);
+  };
+}
+
+function listen(){
+  if(!recognition){
+    // fallback: prompt with a text input for demo environments without SR support
+    promptTextFallback();
+    return;
+  }
+  if(recognizing) return;
+  recognizing = true;
+  micWrap.classList.add('listening');
+  micWrap.classList.toggle('whisper', state.screen === 'whisper-active');
+  try{ recognition.start(); }catch(e){ recognizing = false; }
+}
+
+function promptTextFallback(){
+  const val = window.prompt("Speech recognition unavailable in this browser. Type what you'd say:");
+  if(val !== null) handleTranscript(val.toLowerCase().trim());
+}
+
+// mic tap = manual listen trigger (also acts as wake word substitute for demo reliability)
+micWrap.addEventListener('click', ()=>{
+  if(state.screen === 'sleeping'){ wake(); return; }
+  listen();
+});
+
+// ---------- Wake word ----------
+function startWakeListening(){
+  if(!recognition){ return; } // rely on tap fallback
+  recognition.continuous = false;
+  recognizing = true;
+  try{ recognition.start(); }catch(e){}
+}
+
+function handleTranscript(t){
+  if(state.screen === 'sleeping'){
+    if(t.includes('hey limitless') || t.includes('limitless')){ wake(); }
+    else { speak("Say 'Hey Limitless' to begin."); }
+    return;
+  }
+  if(t.includes('previous screen') || t === 'go back' || t.includes('limitless previous')){
+    goBack(); return;
+  }
+  switch(state.listeningFor){
+    case 'login-face-voice-confirm':
+      handleFaceOrPinVoice('login'); break;
+    case 'command':
+      handleCommand(t); break;
+    case 'qa-answer':
+      handleQAAnswer(t); break;
+    case 'confirm-yesno':
+      handleConfirmYesNo(t); break;
+    case 'balance-followup':
+      handleBalanceFollowup(t); break;
+    default:
+      break;
+  }
+}
+
+// ---------- Screen renderer ----------
+function render(){
+  appEl.classList.toggle('whisper-active', state.screen === 'whisper-active');
+  appEl.classList.toggle('lockout', state.screen === 'lockout');
+  btnRow.innerHTML = "";
+  dynamicArea.innerHTML = "";
+  stepList.innerHTML = "";
+  micWrap.style.display = 'flex';
+
+  if(state.screen === 'sleeping'){
+    badgeEl.textContent = "Sleeping"; badgeEl.className = "badge";
+    titleEl.textContent = "Limitless";
+    subtitleEl.textContent = 'Say "Hey Limitless" to begin';
+    addBtn("Tap to Wake", wake, "action");
+  }
+
+  if(state.screen === 'login-auth'){
+    badgeEl.textContent = "Checkpoint 1 · Login"; badgeEl.className = "badge";
+    titleEl.textContent = "Login Authentication";
+    subtitleEl.textContent = "Fingerprint + Face or Braille PIN";
+    renderStepList([
+      {label:"Fingerprint", done:state.loginFactors.fingerprint},
+      {label:"Facial Recognition or Braille PIN", done:state.loginFactors.faceOrPin}
+    ]);
+    if(!state.loginFactors.fingerprint){
+      addBtn("Simulate Fingerprint", ()=>simulateFingerprint('login'), "action");
+    } else if(!state.loginFactors.faceOrPin){
+      addBtn("Simulate Facial Recognition", ()=>simulateFacialRecog('login'), "action");
+      addBtn("Use Braille PIN instead", ()=>startBraillePIN('login'), "action secondary");
+    }
+  }
+
+  if(state.screen === 'braille-pin'){
+    badgeEl.textContent = state.pinTarget === 'login' ? "Checkpoint 1 · Braille PIN" : "Checkpoint 2 · Braille PIN";
+    badgeEl.className = "badge";
+    titleEl.textContent = "Braille PIN Entry";
+    subtitleEl.textContent = "4-button keypad · press sequence per digit";
+    renderPinGrid();
+  }
+
+  if(state.screen === 'menu'){
+    badgeEl.textContent = "Home"; badgeEl.className = "badge";
+    titleEl.textContent = `Welcome, ${MOCK_USER.name}`;
+    subtitleEl.textContent = "Say a command, or choose below";
+    addBtn("🎙️ Speak Command", ()=>{ state.listeningFor='command'; listen(); }, "action");
+    addBtn("Balance Checking", ()=>startBalanceCheck(), "action secondary");
+    addBtn("Others (not built)", ()=>speak("Others menu is out of scope for this prototype."), "action ghost");
+  }
+
+  if(state.screen === 'balance-auth'){
+    badgeEl.textContent = "Balance Check · Auth"; badgeEl.className = "badge";
+    titleEl.textContent = "Verify to View Balance";
+    subtitleEl.textContent = "Fingerprint + Face or Braille PIN";
+    renderStepList([
+      {label:"Fingerprint", done:state.loginFactors.fingerprint},
+      {label:"Facial Recognition or Braille PIN", done:state.loginFactors.faceOrPin}
+    ]);
+    if(!state.loginFactors.fingerprint){
+      addBtn("Simulate Fingerprint", ()=>simulateFingerprint('balance'), "action");
+    } else if(!state.loginFactors.faceOrPin){
+      addBtn("Simulate Facial Recognition", ()=>simulateFacialRecog('balance'), "action");
+      addBtn("Use Braille PIN instead", ()=>startBraillePIN('balance'), "action secondary");
+    }
+  }
+
+  if(state.screen === 'balance-result'){
+    badgeEl.textContent = "Balance"; badgeEl.className = "badge";
+    titleEl.textContent = "Account Balance";
+    dynamicArea.innerHTML = `<div class="amount-big">₹${MOCK_USER.balance.toLocaleString('en-IN',{minimumFractionDigits:2})}</div>`;
+    addBtn("Back to Menu", ()=>goToMenu(), "action");
+  }
+
+  if(state.screen === 'transaction-auth'){
+    badgeEl.textContent = "Checkpoint 2 · Transaction"; badgeEl.className = "badge";
+    titleEl.textContent = "Transaction Authentication";
+    subtitleEl.textContent = "Fingerprint → Security Q&A → Face or PIN";
+    renderStepList([
+      {label:"Fingerprint", done:state.txnFactors.fingerprint},
+      {label:"Security Q&A (whisper)", done:state.txnFactors.qa},
+      {label:"Facial Recognition or Braille PIN", done:state.txnFactors.faceOrPin}
+    ]);
+    if(!state.txnFactors.fingerprint){
+      addBtn("Simulate Fingerprint", ()=>simulateFingerprint('txn'), "action");
+    } else if(!state.txnFactors.qa){
+      addBtn("Answer Security Question", ()=>startWhisperQA(), "action");
+    } else if(!state.txnFactors.faceOrPin){
+      addBtn("Simulate Facial Recognition", ()=>simulateFacialRecog('txn'), "action");
+      addBtn("Use Braille PIN instead", ()=>startBraillePIN('txn'), "action secondary");
+    }
+  }
+
+  if(state.screen === 'whisper-active'){
+    badgeEl.textContent = "🤫 Whisper Mode · Security Q&A"; badgeEl.className = "badge whisper";
+    titleEl.textContent = "Security Question";
+    subtitleEl.textContent = `We asked: ${MOCK_USER.securityQA.question}`;
+    micWrap.classList.add('whisper');
+    addBtn("🎙️ Speak Answer (2–3 words)", ()=>{ state.listeningFor='qa-answer'; listen(); }, "action");
+  }
+
+  if(state.screen === 'confirm'){
+    badgeEl.textContent = "Confirm Payment"; badgeEl.className = "badge";
+    titleEl.textContent = "Please Confirm";
+    const t = state.pendingTxn;
+    dynamicArea.innerHTML = `
+      <div class="recipient-name">${t.recipientName}</div>
+      <div class="amount-big">₹${t.amount.toLocaleString('en-IN')}</div>
+      <div class="sub">UPI ID: ${t.upi}</div>`;
+    addBtn("🎙️ Say Yes / No", ()=>{ state.listeningFor='confirm-yesno'; listen(); }, "action");
+    addBtn("Confirm", ()=>executeTransaction(), "action secondary");
+    addBtn("Cancel", ()=>cancelTransaction(), "action ghost");
+  }
+
+  if(state.screen === 'success'){
+    badgeEl.textContent = "✅ Success"; badgeEl.className = "badge";
+    titleEl.textContent = "Transaction Successful";
+    const t = state.pendingTxn;
+    dynamicArea.innerHTML = `<div class="recipient-name">Paid ₹${t.amount.toLocaleString('en-IN')} to ${t.recipientName}</div>`;
+    addBtn("Hear Balance", ()=>speakBalanceOptional(), "action secondary");
+    addBtn("Back to Menu", ()=>goToMenu(), "action");
+  }
+
+  if(state.screen === 'lockout'){
+    badgeEl.textContent = state.lockoutLevel >= 2 ? "🔒 Extended Lockout" : "🔒 Temporary Lockout";
+    badgeEl.className = "badge lockout";
+    titleEl.textContent = "Account Locked";
+    subtitleEl.textContent = state.lockoutLevel >= 2
+      ? "Extended lockout active. Bank has been notified again."
+      : "Temporary lockout after 3 failed attempts. Bank notified.";
+    addBtn("Simulate Lockout Expiry", ()=>expireLockout(), "action");
+  }
+
+  micWrap.classList.remove('listening');
+}
+
+function addBtn(text, fn, cls){
+  const b = document.createElement('button');
+  b.className = "action " + (cls.replace('action','').trim());
+  b.textContent = text;
+  b.onclick = fn;
+  btnRow.appendChild(b);
+}
+function renderStepList(items){
+  items.forEach((it,i)=>{
+    const li = document.createElement('li');
+    li.className = it.done ? 'done' : (i===items.findIndex(x=>!x.done) ? 'active':'');
+    li.innerHTML = `<span class="dot"></span> ${it.label} ${it.done?'✓':''}`;
+    stepList.appendChild(li);
+  });
+}
+function renderPinGrid(){
+  dynamicArea.innerHTML = `<div class="pin-entry" id="pinEntry">${'•'.repeat(state.pinBuffer.length)}</div>`;
+  const grid = document.createElement('div');
+  grid.className = 'pin-grid';
+  ['1','2','3','4'].forEach(d=>{
+    const b = document.createElement('button');
+    b.className = 'pin-btn';
+    b.textContent = d;
+    b.onclick = ()=>handleBraillePIN(d);
+    grid.appendChild(b);
+  });
+  dynamicArea.appendChild(grid);
+  addBtn("Clear", ()=>{ state.pinBuffer=""; render(); }, "action ghost");
+}
+
+// ---------- Flow: wake ----------
+async function wake(){
+  state.screen = 'login-auth';
+  state.loginFactors = { fingerprint:false, faceOrPin:false };
+  render();
+  await speak("Limitless activated. Checkpoint 1: please verify your fingerprint.");
+}
+
+function goToMenu(){
+  state.screen = 'menu';
+  state.pendingTxn = null;
+  render();
+  speak("Home menu. Say a command like 'Send 500 rupees to Ramesh', or choose Balance Checking.");
+}
+
+function goBack(){
+  // simplified back-nav for demo
+  if(state.screen === 'confirm'){ cancelTransaction(); return; }
+  if(state.screen === 'balance-result' || state.screen === 'success'){ goToMenu(); return; }
+  speak("Returning to previous screen.");
+}
+
+// ---------- Auth: fingerprint (owned function) ----------
+async function simulateFingerprint(target){
+  await speak("Scanning fingerprint...");
+  await delay(700);
+  const ok = true; // simulated success (hardware constraint: no sensor available)
+  if(ok){
+    if(target === 'login'){ state.loginFactors.fingerprint = true; }
+    if(target === 'balance'){ state.loginFactors.fingerprint = true; }
+    if(target === 'txn'){ state.txnFactors.fingerprint = true; }
+    await speak("Fingerprint verified.");
+    onAuthFactorResult(true, target);
+  } else {
+    onAuthFactorResult(false, target);
+  }
+}
+
+// ---------- Auth: facial recognition (owned function) ----------
+async function simulateFacialRecog(target){
+  await speak("Attempting facial recognition. Please face the camera.");
+  await delay(700);
+  const environmentOk = true; // toggle to false to demo fallback path
+  if(!environmentOk){
+    await speak("Facial recognition unavailable in this lighting. Falling back to Braille PIN.");
+    startBraillePIN(target);
+    return;
+  }
+  const ok = true; // simulated
+  if(ok){
+    if(target === 'login' || target === 'balance'){ state.loginFactors.faceOrPin = true; }
+    if(target === 'txn'){ state.txnFactors.faceOrPin = true; }
+    await speak("Face verified.");
+    onAuthFactorResult(true, target);
+  } else {
+    onAuthFactorResult(false, target);
+  }
+}
+
+// ---------- Auth: braille PIN (owned function) ----------
+function startBraillePIN(target){
+  state.pinTarget = target;
+  state.pinBuffer = "";
+  state.screen = 'braille-pin';
+  render();
+  speak("Braille PIN entry. Enter your 4-digit combination.");
+}
+function handleBraillePIN(digit){
+  state.pinBuffer += digit;
+  render();
+  if(state.pinBuffer.length >= 4){
+    const correct = state.pinBuffer === MOCK_USER.braillePin;
+    const target = state.pinTarget;
+    setTimeout(async ()=>{
+      if(correct){
+        if(target === 'login' || target === 'balance'){ state.loginFactors.faceOrPin = true; }
+        if(target === 'txn'){ state.txnFactors.faceOrPin = true; }
+        await speak("PIN correct.");
+        onAuthFactorResult(true, target);
+      } else {
+        await speak("Incorrect PIN.");
+        onAuthFactorResult(false, target);
+      }
+    }, 300);
+  }
+}
+
+// ---------- Auth: lockout check (owned function) ----------
+function checkLockout(){
+  if(state.failCount >= 3){
+    state.lockoutLevel += 1;
+    state.failCount = 0;
+    state.screen = 'lockout';
+    render();
+    speak(state.lockoutLevel >= 2
+      ? "Too many failed attempts again. Extended lockout applied. Your bank has been notified a second time."
+      : "Too many failed attempts. Temporary lockout applied. Your bank has been notified.");
+    return true;
+  }
+  return false;
+}
+function expireLockout(){
+  state.screen = state.lockoutLevel >= 2 ? 'sleeping' : 'sleeping';
+  render();
+  speak("Lockout expired. You may try again.");
+}
+
+// ---------- Auth result router ----------
+function onAuthFactorResult(success, target){
+  if(!success){
+    state.failCount += 1;
+    if(checkLockout()) return;
+    render();
+    speak("Authentication failed. Please try again.");
+    return;
+  }
+  state.failCount = 0;
+
+  if(target === 'login'){
+    render();
+    if(state.loginFactors.fingerprint && state.loginFactors.faceOrPin){
+      speak("Login authentication complete.").then(goToMenu);
+    } else {
+      speak("Now verify facial recognition, or use your Braille PIN.");
+    }
+    return;
+  }
+  if(target === 'balance'){
+    render();
+    if(state.loginFactors.fingerprint && state.loginFactors.faceOrPin){
+      showBalance();
+    } else {
+      speak("Now verify facial recognition, or use your Braille PIN.");
+    }
+    return;
+  }
+  if(target === 'txn'){
+    render();
+    if(!state.txnFactors.fingerprint){ return; }
+    if(state.txnFactors.fingerprint && !state.txnFactors.qa){
+      speak("Now answer your security question.");
+      return;
+    }
+    if(state.txnFactors.qa && !state.txnFactors.faceOrPin){
+      speak("Finally, verify facial recognition, or use your Braille PIN.");
+      return;
+    }
+    if(state.txnFactors.fingerprint && state.txnFactors.qa && state.txnFactors.faceOrPin){
+      goToConfirm();
+    }
+  }
+}
+
+// ---------- Whisper-mode Security Q&A ----------
+async function startWhisperQA(){
+  state.screen = 'whisper-active';
+  render();
+  await speak(`Entering whisper mode. Security question: what is ${MOCK_USER.securityQA.question}?`, {whisper:true});
+}
+async function handleQAAnswer(transcript){
+  const correct = transcript.includes(MOCK_USER.securityQA.answer);
+  if(correct){
+    state.txnFactors.qa = true;
+    await speak("Answer correct. Exiting whisper mode.", {whisper:true});
+    state.screen = 'transaction-auth';
+    onAuthFactorResult(true, 'txn');
+  } else {
+    state.failCount += 1;
+    await speak("That answer doesn't match. Try again, or say your answer once more.", {whisper:true});
+    if(checkLockout()) return;
+    render();
+  }
+}
+
+// ---------- Voice command parsing (send money) ----------
+async function handleCommand(t){
+  // "send 500 rupees to ramesh" / "send rs 500 to 9876543210" / "pay 200 to raj"
+  const amtMatch = t.match(/(\d+(\.\d+)?)/);
+  const amount = amtMatch ? parseFloat(amtMatch[1]) : null;
+
+  if(!amount){
+    speak("I didn't catch an amount. Please say something like: send 500 rupees to Ramesh.");
+    return;
+  }
+
+  // recipient: try circle nickname, then phone number, then raw upi-looking token
+  let recipient = null;
+  const circleMatch = MOCK_USER.circle.find(c => t.includes(c.nickname));
+  if(circleMatch){
+    recipient = { recipientName: circleMatch.holder, upi: circleMatch.upi };
+  } else {
+    const phoneMatch = t.match(/\b\d{10}\b/);
+    if(phoneMatch && MOCK_PHONE_DIRECTORY[phoneMatch[0]]){
+      const d = MOCK_PHONE_DIRECTORY[phoneMatch[0]];
+      recipient = { recipientName: d.holder, upi: d.upi };
+    } else if(t.includes('@')){
+      recipient = { recipientName: "Unlisted UPI Recipient", upi: t.split(' ').find(w=>w.includes('@')) };
+    }
+  }
+
+  if(!recipient){
+    speak("I couldn't resolve that recipient. Try a saved nickname like Ramesh, a phone number, or a UPI ID.");
+    return;
+  }
+
+  state.pendingTxn = { recipientName: recipient.recipientName, upi: recipient.upi, amount };
+  state.txnFactors = { fingerprint:false, qa:false, faceOrPin:false };
+  state.screen = 'transaction-auth';
+  render();
+  await speak(`Got it. Sending ${amount} rupees to ${recipient.recipientName}. Checkpoint 2: please verify your fingerprint.`);
+}
+
+// ---------- Confirm & execute ----------
+async function goToConfirm(){
+  state.screen = 'confirm';
+  render();
+  const t = state.pendingTxn;
+  await speak(`Confirm: pay ${t.amount} rupees to ${t.recipientName}, account ${t.upi}. Say yes to confirm, or no to cancel.`);
+}
+function handleConfirmYesNo(t){
+  if(t.includes('yes') || t.includes('confirm')) executeTransaction();
+  else if(t.includes('no') || t.includes('cancel')) cancelTransaction();
+  else speak("Please say yes to confirm, or no to cancel.");
+}
+async function executeTransaction(){
+  await speak("Processing transaction...");
+  await delay(600);
+  state.screen = 'success';
+  render();
+  await speak(`Transaction successful. ${state.pendingTxn.amount} rupees sent to ${state.pendingTxn.recipientName}.`);
+  await speak("Would you like to hear your updated balance? You can tap Hear Balance.");
+}
+function cancelTransaction(){
+  state.pendingTxn = null;
+  goToMenu();
+  speak("Transaction cancelled.");
+}
+
+// ---------- Balance ----------
+function startBalanceCheck(){
+  state.loginFactors = { fingerprint:false, faceOrPin:false };
+  state.screen = 'balance-auth';
+  render();
+  speak("Verifying identity to check balance. Please verify your fingerprint.");
+}
+async function showBalance(){
+  state.screen = 'balance-result';
+  render();
+  await speak(`Your available balance is ${MOCK_USER.balance.toLocaleString('en-IN')} rupees.`);
+}
+async function speakBalanceOptional(){
+  // simulated deduction for demo realism
+  MOCK_USER.balance -= state.pendingTxn.amount;
+  await speak(`Your updated balance is ${MOCK_USER.balance.toLocaleString('en-IN')} rupees.`);
+}
+function handleBalanceFollowup(t){ /* reserved */ }
+
+// ---------- utils ----------
+function delay(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+// ---------- init ----------
+render();
+speak('Limitless prototype ready. Tap the microphone, or say "Hey Limitless" to begin.');
+
+// ---------- PWA: service worker registration ----------
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed', err));
+  });
+}
+</script>
+</body>
+</html>
