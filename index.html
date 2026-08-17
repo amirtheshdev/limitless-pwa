@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Limitless — Voice-First UPI</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#0b0d10">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <button class="corner" id="corner-tl" aria-label="Repeat last spoken content"></button>
+  <button class="corner" id="corner-tr" aria-label="Repeat last spoken content"></button>
+  <button class="corner" id="corner-bl" aria-label="Repeat last spoken content"></button>
+  <button class="corner" id="corner-br" aria-label="Repeat last spoken content"></button>
+
+  <div class="card" id="card">
+    <span class="badge" id="badge">Sleeping</span>
+    <h1 id="title">Limitless</h1>
+    <div class="sub" id="subtitle">Say "Hey Limitless" to begin</div>
+
+    <div class="mic-wrap" id="micWrap"><span class="mic-icon">🎙️</span></div>
+
+    <div class="status-line" id="statusLine" aria-live="polite">Tap the mic or say the wake word.</div>
+
+    <div id="dynamicArea"></div>
+
+    <div class="btn-row" id="btnRow"></div>
+
+    <ul class="step-list" id="stepList"></ul>
+
+    <div class="log" id="log" aria-hidden="true"></div>
+  </div>
+
+  <footer class="hint">Prototype demo · simulated biometrics · mock UPI data · touch any corner to repeat</footer>
+</div>
+
+<!-- LOAD ORDER MATTERS. Do not reorder without checking with the team. -->
+<script src="js/state.js"></script>
+<script src="js/transactions.js"></script>
+<script src="js/speech.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
